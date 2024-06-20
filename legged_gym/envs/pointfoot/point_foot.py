@@ -1,4 +1,5 @@
 import os
+import sys
 from typing import Dict
 
 import torch
@@ -26,6 +27,7 @@ class PointFoot:
             device_id (int): 0, 1, ...
             headless (bool): Run without rendering if True
         """
+        self.props = []
         self.cfg = cfg
         self.sim_params = sim_params
         self.height_samples = None
@@ -95,6 +97,18 @@ class PointFoot:
         self._init_buffers()
         self._prepare_reward_function()
         self.init_done = True
+
+    def update_frictions(self, fric):
+        """update the friction coefficient for all envs"""
+        asset_root = os.path.dirname(self.cfg.asset.file.format(LEGGED_GYM_ROOT_DIR=LEGGED_GYM_ROOT_DIR))
+        asset_file = os.path.basename(self.cfg.asset.file.format(LEGGED_GYM_ROOT_DIR=LEGGED_GYM_ROOT_DIR))
+        asset_options = gymapi.AssetOptions()
+        robot_asset = self.gym.load_asset(self.sim, asset_root, asset_file, asset_options)
+
+        rigid_shape_props = self.gym.get_asset_rigid_shape_properties(robot_asset)
+        for prop in rigid_shape_props:
+            prop.friction = fric
+        self.gym.set_asset_rigid_shape_properties(robot_asset, rigid_shape_props)
 
     def get_observations(self):
         return self.proprioceptive_obs_buf
@@ -397,7 +411,17 @@ class PointFoot:
 
             for s in range(len(props)):
                 props[s].friction = self.friction_coeffs[env_id]
+                # self._log_friction_data(env_id, props[s].friction)
         return props
+
+    # def _log_friction_data(self, env_id, friction_value):
+    #     """ Log friction data for each environment"""
+    #     if len(self.friction) <= env_id:
+    #         self.friction.append([])
+    #     self.friction[env_id].append(friction_value)
+    #
+    # def get_friction(self):
+    #     return self.friction
 
     def _process_dof_props(self, props, env_id):
         """ Callback allowing to store/change/randomize the DOF properties of each environment.
@@ -900,6 +924,7 @@ class PointFoot:
             start_pose.p = gymapi.Vec3(*pos)
 
             rigid_shape_props = self._process_rigid_shape_props(rigid_shape_props_asset, i)
+            self.props.append(rigid_shape_props)  # store the props of each env in self.props
             self.gym.set_asset_rigid_shape_properties(robot_asset, rigid_shape_props)
             actor_handle = self.gym.create_actor(env_handle, robot_asset, start_pose, self.cfg.asset.name, i,
                                                  self.cfg.asset.self_collisions, 0)

@@ -12,10 +12,10 @@ def extract_real_features(real_entry):
     # Concatenate all relevant features from the real entry to match the simulated data
     features = np.concatenate([
         real_entry['imu_gyro'],           # Gyroscope data from IMU
+        real_entry['proj_gracity'],  # Projected gravity calculated using IMUData
         real_entry['joint_positions'],    # Joint positions from Joint States
         real_entry['joint_velocities'],   # Joint velocities from Joint States
         real_entry['action_data'],   # Actions from policy
-        real_entry['proj_gravity'],   # Projected gravity calculated using IMUData
         real_entry['joint_torques']
     ])
     return features
@@ -33,5 +33,5 @@ def real_to_tensor(real_data_file):
         real_data_tensor.append(real_tensor)
 
     real_data_tensor = torch.stack(real_data_tensor)
-    return real_data_tensor
+    return real_data_tensor[:8192]
 
