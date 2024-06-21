@@ -98,13 +98,8 @@ class PointFoot:
         self._prepare_reward_function()
         self.init_done = True
 
-    def update_frictions(self, fric):
+    def update_frictions(self, fric, robot_asset):
         """update the friction coefficient for all envs"""
-        asset_root = os.path.dirname(self.cfg.asset.file.format(LEGGED_GYM_ROOT_DIR=LEGGED_GYM_ROOT_DIR))
-        asset_file = os.path.basename(self.cfg.asset.file.format(LEGGED_GYM_ROOT_DIR=LEGGED_GYM_ROOT_DIR))
-        asset_options = gymapi.AssetOptions()
-        robot_asset = self.gym.load_asset(self.sim, asset_root, asset_file, asset_options)
-
         rigid_shape_props = self.gym.get_asset_rigid_shape_properties(robot_asset)
         for prop in rigid_shape_props:
             prop.friction = fric

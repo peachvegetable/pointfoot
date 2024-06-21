@@ -33,6 +33,7 @@ import os
 from datetime import datetime
 
 import isaacgym
+from isaacgym import gymapi
 from legged_gym.envs import *
 from legged_gym.utils import get_args, task_registry
 import torch
@@ -41,43 +42,42 @@ from legged_gym.models.generator import Generator
 from legged_gym.scripts.extract_real import real_to_tensor
 import torch.optim as optim
 import onnxruntime as ort
+from legged_gym import LEGGED_GYM_ROOT_DIR
 
 
 def load_policy(policy_path):
     return ort.InferenceSession(policy_path)
 
 
-def get_actions(policy, obs):
+def get_actions(policy, obs, device):
     obs_np = obs.cpu().numpy()
     obs_np = obs_np.reshape(-1)
 
     inputs = {policy.get_inputs()[0].name: obs_np}
     actions = policy.run(None, inputs)
 
-    action_tensors = torch.tensor(actions[0], dtype=torch.float32, device=torch.device("cuda"))
+    action_tensors = torch.tensor(actions[0], dtype=torch.float32, device=device)
     return action_tensors.unsqueeze(0)
 
 
-def simulate_trajectory(sim_params, policy, env, obs):
-    traj = []
+def simulate_trajectory(sim_params, policy, env, obs, device, robot_asset):
     friction = sim_params
 
-    env.update_frictions(friction)
+    env.update_frictions(friction, robot_asset)
     # make the env updated
     env.step(env.actions)
 
-    actions = get_actions(policy, obs)
+    actions = get_actions(policy, obs, device)
     obs, _, _, _, _ = env.step(actions)
-    traj.append(obs)
 
-    return torch.tensor(traj[0], dtype=torch.float32, device=torch.device("cuda"))
+    return obs.to(device)
 
 
-def collect_trajectory(sim_traj, step):
+def collect_trajectory(sim_traj, step, device):
     tot_traj = []
     for _ in range(step):
         tot_traj.append(sim_traj)
-    return torch.stack(tot_traj)
+    return torch.stack(tot_traj).to(device)
 
 
 def train(args, real_data, policy_path):
@@ -85,17 +85,22 @@ def train(args, real_data, policy_path):
     ppo_runner, train_cfg = task_registry.make_alg_runner(env=env, name=args.task, args=args)
     obs, _ = env.reset()
     policy = load_policy(policy_path)
-    device = torch.device("cuda")
+    device = ppo_runner.device
     fric_range = env.cfg.domain_rand.friction_range
-    step = 10
+    step = 50
+
+    asset_root = os.path.dirname(env.cfg.asset.file.format(LEGGED_GYM_ROOT_DIR=LEGGED_GYM_ROOT_DIR))
+    asset_file = os.path.basename(env.cfg.asset.file.format(LEGGED_GYM_ROOT_DIR=LEGGED_GYM_ROOT_DIR))
+    asset_options = gymapi.AssetOptions()
+    robot_asset = env.gym.load_asset(env.sim, asset_root, asset_file, asset_options)
 
     criterion = torch.nn.BCELoss()
 
     # Define discriminator and generator
-    discriminator = TransformerDiscriminator(input_dim=env.num_obs, hidden_dim=80, num_layers=2, output_dim=1).to(device)
+    discriminator = TransformerDiscriminator(input_dim=27, hidden_dim=80, num_layers=2, output_dim=1).to(device)
     # input_dim = 2 since we only modify friction and added_mass
     # generator = TransformerGenerator(input_dim=1, hidden_dim=40, num_layers=2, output_dim=1).to(device)
-    generator = Generator(noise_dim=1, hidden_dim=40, output_range=fric_range)
+    generator = Generator(noise_dim=1, hidden_dim=40, output_range=fric_range).to(device)
 
     # Define optimizers
     disc_optimizer = optim.Adam(discriminator.parameters(), lr=0.001)
@@ -112,15 +117,15 @@ def train(args, real_data, policy_path):
             # Define labels
             real_label = torch.ones((step, 1)).to(device)
             sim_params = generator(noise)
-            fake_label = torch.zeros((1, 1)).to(device)
+            fake_label = torch.zeros((step, 1)).to(device)
 
             # Train discriminator
             disc_optimizer.zero_grad()
             real_output = discriminator(real_traj)
             d_real_loss = criterion(real_output, real_label)
-            sim_traj = simulate_trajectory(sim_params, policy, env, obs)
-            sim_traj = collect_trajectory(sim_traj, step)
-            fake_output = discriminator(sim_traj)
+            sim_traj = simulate_trajectory(sim_params, policy, env, obs, device, robot_asset)
+            sim_trajs = collect_trajectory(sim_traj, step, device)
+            fake_output = discriminator(sim_trajs)
             d_fake_loss = criterion(fake_output, fake_label)
 
             d_loss = (d_real_loss + d_fake_loss) / 2
@@ -131,16 +136,13 @@ def train(args, real_data, policy_path):
             gen_optimizer.zero_grad()
             noise = torch.randn(1).to(device)  # random noise
             sim_params = generator(noise)
-            sim_traj = simulate_trajectory(sim_params, policy, env, obs)
-            sim_traj = collect_trajectory(sim_traj, step)
-            fake_output = discriminator(sim_traj)
+            sim_traj = simulate_trajectory(sim_params, policy, env, obs, device, robot_asset)
+            sim_trajs = collect_trajectory(sim_traj, step, device)
+            fake_output = discriminator(sim_trajs)
 
             g_loss = criterion(fake_output, real_label)
             g_loss.backward()
             gen_optimizer.step()
-
-            d_real_loss.backward()
-            disc_optimizer.step()
 
             print(f"Epoch [{epoch+1}/{num_epochs}], d_loss: {d_loss.item()}, g_loss: {g_loss.item()}")
 
@@ -148,7 +150,7 @@ def train(args, real_data, policy_path):
 if __name__ == '__main__':
     # Load real data
     real_data_file = '/home/peachvegetable/realdata/2024-06-14-10-27-54.npy'
-    real_data = real_to_tensor(real_data_file)
+    real_data = real_to_tensor(real_data_file, 50)
     policy_path = '/home/peachvegetable/policy/policy.onnx'
     args = get_args()
     train(args, real_data, policy_path)
