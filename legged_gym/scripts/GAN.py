@@ -27,6 +27,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 # Copyright (c) 2021 ETH Zurich, Nikita Rudin
+from collections import defaultdict
 
 import numpy as np
 import os
@@ -49,7 +50,11 @@ def load_policy(policy_path):
     return ort.InferenceSession(policy_path)
 
 
-def get_actions(policy, obs, device):
+def get_actions(policy, env, cmd, device):
+    obs = env.get_observations()
+    obs[0][-1] = cmd[-1]
+    obs[0][-2] = cmd[-2]
+    obs[0][-3] = cmd[-3]
     obs_np = obs.cpu().numpy()
     obs_np = obs_np.reshape(-1)
 
@@ -60,14 +65,14 @@ def get_actions(policy, obs, device):
     return action_tensors.unsqueeze(0)
 
 
-def simulate_trajectory(sim_params, policy, env, obs, device, robot_asset):
+def simulate_trajectory(sim_params, policy, env, cmd, device, robot_asset):
     friction = sim_params
 
     env.update_frictions(friction, robot_asset)
     # make the env updated
     env.step(env.actions)
 
-    actions = get_actions(policy, obs, device)
+    actions = get_actions(policy, env, cmd, device)
     obs, _, _, _, _ = env.step(actions)
 
     return obs.to(device)
@@ -80,14 +85,35 @@ def collect_trajectory(sim_traj, step, device):
     return torch.stack(tot_traj).to(device)
 
 
+def categorize_data_by_cmd(data):
+    """
+    Categorize the data based on the last three items (cmd) in each observation.
+
+    Args:
+    - data (torch.Tensor): The input tensor of shape (N, 1, 27), where N is the number of observations.
+
+    Returns:
+    - dict: A dictionary where keys are tuples representing cmd values, and values are lists of observations.
+    """
+    categorized_data = defaultdict(list)
+
+    for obs in data:
+        # Extract the last three items as cmd from the last dimension
+        cmd = tuple(obs[0, -3:].tolist())  # Convert to tuple to make it hashable
+        # Add the observation to the corresponding cmd category
+        categorized_data[cmd].append(obs)
+
+    return categorized_data
+
+
 def train(args, real_data, policy_path):
     env, env_cfg = task_registry.make_env(name=args.task, args=args)
     ppo_runner, train_cfg = task_registry.make_alg_runner(env=env, name=args.task, args=args)
-    obs, _ = env.reset()
+    env.reset()
     policy = load_policy(policy_path)
     device = ppo_runner.device
     fric_range = env.cfg.domain_rand.friction_range
-    step = 50
+    real_data = categorize_data_by_cmd(real_data)
 
     asset_root = os.path.dirname(env.cfg.asset.file.format(LEGGED_GYM_ROOT_DIR=LEGGED_GYM_ROOT_DIR))
     asset_file = os.path.basename(env.cfg.asset.file.format(LEGGED_GYM_ROOT_DIR=LEGGED_GYM_ROOT_DIR))
@@ -103,14 +129,18 @@ def train(args, real_data, policy_path):
     generator = Generator(noise_dim=1, hidden_dim=40, output_range=fric_range).to(device)
 
     # Define optimizers
-    disc_optimizer = optim.Adam(discriminator.parameters(), lr=0.001)
-    gen_optimizer = optim.Adam(generator.parameters(), lr=0.001)
+    disc_optimizer = optim.Adam(discriminator.parameters(), lr=0.0001)
+    gen_optimizer = optim.Adam(generator.parameters(), lr=0.0001)
 
-    num_epochs = train_cfg.runner.max_iterations
+    # train_cfg.runner.max_iterations
+    num_epochs = 10000
     for epoch in range(num_epochs):
-        for real_traj in real_data:
+        for key in real_data:
             # Extract real data
+            real_traj = torch.stack(real_data[key])
             real_traj = real_traj.to(device)
+            step = real_traj.shape[0]
+            cmd = key
 
             noise = torch.randn(1).to(device)  # random noise
 
@@ -123,7 +153,7 @@ def train(args, real_data, policy_path):
             disc_optimizer.zero_grad()
             real_output = discriminator(real_traj)
             d_real_loss = criterion(real_output, real_label)
-            sim_traj = simulate_trajectory(sim_params, policy, env, obs, device, robot_asset)
+            sim_traj = simulate_trajectory(sim_params, policy, env, cmd, device, robot_asset)
             sim_trajs = collect_trajectory(sim_traj, step, device)
             fake_output = discriminator(sim_trajs)
             d_fake_loss = criterion(fake_output, fake_label)
@@ -134,9 +164,7 @@ def train(args, real_data, policy_path):
 
             # Train generator
             gen_optimizer.zero_grad()
-            noise = torch.randn(1).to(device)  # random noise
-            sim_params = generator(noise)
-            sim_traj = simulate_trajectory(sim_params, policy, env, obs, device, robot_asset)
+            sim_traj = simulate_trajectory(sim_params, policy, env, cmd, device, robot_asset)
             sim_trajs = collect_trajectory(sim_traj, step, device)
             fake_output = discriminator(sim_trajs)
 
@@ -149,8 +177,8 @@ def train(args, real_data, policy_path):
 
 if __name__ == '__main__':
     # Load real data
-    real_data_file = '/home/peachvegetable/realdata/2024-06-14-10-27-54.npy'
-    real_data = real_to_tensor(real_data_file, 50)
+    real_data_file = '/home/peachvegetable/realdata/rr.npy'
+    real_data = real_to_tensor(real_data_file)
     policy_path = '/home/peachvegetable/policy/policy.onnx'
     args = get_args()
     train(args, real_data, policy_path)

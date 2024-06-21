@@ -13,10 +13,11 @@ import torch.optim as optim
 import numpy as np
 import torch
 from legged_gym.utils import get_args, task_registry
-from legged_gym.scripts.GAN import load_policy, get_actions, simulate_trajectory
+from legged_gym.scripts.GAN import load_policy, get_actions, simulate_trajectory, categorize_data_by_cmd
 from legged_gym.models.generator import Generator
 from legged_gym.models.discriminator import TransformerDiscriminator
 from legged_gym import LEGGED_GYM_ROOT_DIR
+from collections import defaultdict
 
 
 def main():
@@ -27,22 +28,23 @@ def main():
     obs, _ = env.reset()
 
     # Test obs
-    # print(obs.shape)
-    # print(obs)
-    # obs[0][0] = 0.9
-    # print(obs[0][0])
+    print(obs.shape)
+    print(obs[0][-3:])
 
     # Test real data
-    # real_data_file = '/home/peachvegetable/realdata/2024-06-14-10-27-54.npy'
-    # real_data, tot_cmd = extract_real.real_to_tensor(real_data_file, 10)
+    # real_data_file = '/home/peachvegetable/realdata/rr.npy'
+    # real_data = extract_real.real_to_tensor(real_data_file)
+    # real_data = categorize_data_by_cmd(real_data)
+    # for data in real_data:
+    #     print(data)
 
     # Test load_policy and get_actions
     # policy_path = '/home/peachvegetable/policy/policy.onnx'
     # policy = load_policy(policy_path)
-    # actions = get_actions(policy, obs)
+    # actions = get_actions(policy, env, device=torch.device("cuda"))
     # print(actions.shape)
+    # print(actions)
     # print(f"env actions: {env.actions}")
-    # print(simulate_trajectory((0.1, 1), policy, env, obs, 1))
 
     # Test update_frictions
     # asset_root = os.path.dirname(env.cfg.asset.file.format(LEGGED_GYM_ROOT_DIR=LEGGED_GYM_ROOT_DIR))
