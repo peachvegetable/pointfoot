@@ -20,6 +20,7 @@ from legged_gym import LEGGED_GYM_ROOT_DIR
 from collections import defaultdict
 
 
+
 def main():
     args = get_args()
     env, env_cfg = task_registry.make_env(name=args.task, args=args)
@@ -28,8 +29,16 @@ def main():
     obs, _ = env.reset()
 
     # Test obs
-    print(obs.shape)
-    print(obs[0][-3:])
+    # print(obs.shape)
+    # print(obs[0][-3:])
+
+    # Test cmd
+    # cmd = [0.5, 0, 0.5]
+    # env.update_cmd(cmd)
+    # obs1 = env.get_observations()
+    # print(torch.equal(obs, obs1))
+    # print(f"First obs: {obs}")
+    # print(f"Second obs: {obs1}")
 
     # Test real data
     # real_data_file = '/home/peachvegetable/realdata/rr.npy'

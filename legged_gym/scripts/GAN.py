@@ -39,11 +39,13 @@ from legged_gym.envs import *
 from legged_gym.utils import get_args, task_registry
 import torch
 from legged_gym.models.discriminator import TransformerDiscriminator
-from legged_gym.models.generator import Generator
+from legged_gym.models.generator import TransformerGenerator
 from legged_gym.scripts.extract_real import real_to_tensor
 import torch.optim as optim
 import onnxruntime as ort
 from legged_gym import LEGGED_GYM_ROOT_DIR
+from torch.utils.tensorboard import SummaryWriter
+import matplotlib.pyplot as plt
 
 
 def load_policy(policy_path):
@@ -51,10 +53,8 @@ def load_policy(policy_path):
 
 
 def get_actions(policy, env, cmd, device):
+    env.update_cmd(cmd)
     obs = env.get_observations()
-    obs[0][-1] = cmd[-1]
-    obs[0][-2] = cmd[-2]
-    obs[0][-3] = cmd[-3]
     obs_np = obs.cpu().numpy()
     obs_np = obs_np.reshape(-1)
 
@@ -86,15 +86,7 @@ def collect_trajectory(sim_traj, step, device):
 
 
 def categorize_data_by_cmd(data):
-    """
-    Categorize the data based on the last three items (cmd) in each observation.
-
-    Args:
-    - data (torch.Tensor): The input tensor of shape (N, 1, 27), where N is the number of observations.
-
-    Returns:
-    - dict: A dictionary where keys are tuples representing cmd values, and values are lists of observations.
-    """
+    """Categorize the data based on the last three items (cmd) in each observation."""
     categorized_data = defaultdict(list)
 
     for obs in data:
@@ -122,18 +114,24 @@ def train(args, real_data, policy_path):
 
     criterion = torch.nn.BCELoss()
 
+    # Initialize TensorBoard writer
+    log_dir = "./logs/gan_training"
+    writer = SummaryWriter(log_dir)
+
+    # Storage for trajectories
+    real_traj_list = []
+    sim_traj_list = []
+
     # Define discriminator and generator
     discriminator = TransformerDiscriminator(input_dim=27, hidden_dim=80, num_layers=2, output_dim=1).to(device)
-    # input_dim = 2 since we only modify friction and added_mass
-    # generator = TransformerGenerator(input_dim=1, hidden_dim=40, num_layers=2, output_dim=1).to(device)
-    generator = Generator(noise_dim=1, hidden_dim=40, output_range=fric_range).to(device)
+    generator = TransformerGenerator(noise_dim=1, hidden_dim=80, output_range=fric_range).to(device)
 
     # Define optimizers
     disc_optimizer = optim.Adam(discriminator.parameters(), lr=0.0001)
     gen_optimizer = optim.Adam(generator.parameters(), lr=0.0001)
 
-    # train_cfg.runner.max_iterations
-    num_epochs = 10000
+    # num_epochs = train_cfg.runner.max_iterations
+    num_epochs = 100000
     for epoch in range(num_epochs):
         for key in real_data:
             # Extract real data
@@ -142,7 +140,7 @@ def train(args, real_data, policy_path):
             step = real_traj.shape[0]
             cmd = key
 
-            noise = torch.randn(1).to(device)  # random noise
+            noise = torch.rand(1).to(device) * 1.6  # random noise
 
             # Define labels
             real_label = torch.ones((step, 1)).to(device)
@@ -172,7 +170,31 @@ def train(args, real_data, policy_path):
             g_loss.backward()
             gen_optimizer.step()
 
-            print(f"Epoch [{epoch+1}/{num_epochs}], d_loss: {d_loss.item()}, g_loss: {g_loss.item()}")
+            # print(f"Epoch [{epoch+1}/{num_epochs}], d_loss: {d_loss.item()}, g_loss: {g_loss.item()}")
+
+            # Log the losses to TensorBoard
+            writer.add_scalar('Loss/Discriminator', d_loss.item(), epoch)
+            writer.add_scalar('Loss/Generator', g_loss.item(), epoch)
+
+    writer.close()
+
+
+def plot_trajectories(real, sim, num_samples=5):
+    for i in range(num_samples):
+        real_traj = real[i]
+        sim_traj = sim[i]
+
+        plt.figure(figsize=(12, 6))
+
+        for j in range(real_traj.shape[-1]):
+            plt.plot(real_traj[:, 0, j], label=f"Real traj feature {j}", linestyle='--')
+            plt.plot(sim_traj[:, 0, j], label=f"Sim traj feature {j}")
+
+        plt.legend()
+        plt.title(f"Trajectory comparison {i+1}")
+        plt.xlabel("Step")
+        plt.ylabel("Value")
+        plt.show()
 
 
 if __name__ == '__main__':
