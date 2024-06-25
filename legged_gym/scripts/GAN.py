@@ -65,12 +65,17 @@ def get_actions(policy, env, cmd, device):
     return action_tensors.unsqueeze(0)
 
 
-def simulate_trajectory(sim_params, policy, env, cmd, device, robot_asset):
-    friction = sim_params
+def simulate_trajectory(sim_params, policy, env, cmd, device, rigid_shape_props, robot_asset, body_props,
+                        base_mass, base_com, env_handle, actor_handle):
+    friction = sim_params[0][0]
+    added_mass = sim_params[0][1]
+    added_com = sim_params[0][2:]
 
-    env.update_frictions(friction, robot_asset)
-    # make the env updated
-    env.step(env.actions)
+    env.update_frictions(friction, rigid_shape_props, robot_asset)
+    env.update_added_mass(base_mass, added_mass, body_props, env_handle, actor_handle)
+    env.update_base_com(body_props, base_com, added_com, env_handle, actor_handle)
+    # # make the env updated
+    # env.step(env.actions)
 
     actions = get_actions(policy, env, cmd, device)
     obs, _, _, _, _ = env.step(actions)
@@ -104,13 +109,23 @@ def train(args, real_data, policy_path):
     env.reset()
     policy = load_policy(policy_path)
     device = ppo_runner.device
-    fric_range = env.cfg.domain_rand.friction_range
+    # fric_range = env.cfg.domain_rand.friction_range
+    # added_mass_range = env.cfg.domain_rand.added_mass_range
+    # com_range = env.cfg.domain_rand.rand_com_vec
     real_data = categorize_data_by_cmd(real_data)
 
     asset_root = os.path.dirname(env.cfg.asset.file.format(LEGGED_GYM_ROOT_DIR=LEGGED_GYM_ROOT_DIR))
     asset_file = os.path.basename(env.cfg.asset.file.format(LEGGED_GYM_ROOT_DIR=LEGGED_GYM_ROOT_DIR))
     asset_options = gymapi.AssetOptions()
     robot_asset = env.gym.load_asset(env.sim, asset_root, asset_file, asset_options)
+    rigid_shape_props = env.gym.get_asset_rigid_shape_properties(robot_asset)
+    env_handle = env.envs[0]
+    actor_handle = env.actor_handles[0]
+    props = env.gym.get_actor_rigid_body_properties(env_handle, actor_handle)
+
+    # base mass and base com
+    base_mass = props[0].mass
+    base_com = props[0].com
 
     criterion = torch.nn.BCELoss()
 
@@ -118,13 +133,9 @@ def train(args, real_data, policy_path):
     log_dir = "./logs/gan_training"
     writer = SummaryWriter(log_dir)
 
-    # Storage for trajectories
-    real_traj_list = []
-    sim_traj_list = []
-
     # Define discriminator and generator
     discriminator = TransformerDiscriminator(input_dim=27, hidden_dim=80, num_layers=2, output_dim=1).to(device)
-    generator = TransformerGenerator(noise_dim=1, hidden_dim=80, output_range=fric_range).to(device)
+    generator = TransformerGenerator(input_dim=5, hidden_dim=80, output_dim=5).to(device)
 
     # Define optimizers
     disc_optimizer = optim.Adam(discriminator.parameters(), lr=0.0001)
@@ -140,7 +151,7 @@ def train(args, real_data, policy_path):
             step = real_traj.shape[0]
             cmd = key
 
-            noise = torch.rand(1).to(device) * 1.6  # random noise
+            noise = torch.randn(5).to(device)  # random noise
 
             # Define labels
             real_label = torch.ones((step, 1)).to(device)
@@ -151,7 +162,8 @@ def train(args, real_data, policy_path):
             disc_optimizer.zero_grad()
             real_output = discriminator(real_traj)
             d_real_loss = criterion(real_output, real_label)
-            sim_traj = simulate_trajectory(sim_params, policy, env, cmd, device, robot_asset)
+            sim_traj = simulate_trajectory(sim_params, policy, env, cmd, device, rigid_shape_props, robot_asset, props,
+                                           base_mass, base_com, env_handle, actor_handle)
             sim_trajs = collect_trajectory(sim_traj, step, device)
             fake_output = discriminator(sim_trajs)
             d_fake_loss = criterion(fake_output, fake_label)
@@ -162,7 +174,8 @@ def train(args, real_data, policy_path):
 
             # Train generator
             gen_optimizer.zero_grad()
-            sim_traj = simulate_trajectory(sim_params, policy, env, cmd, device, robot_asset)
+            sim_traj = simulate_trajectory(sim_params, policy, env, cmd, device, rigid_shape_props, robot_asset, props,
+                                           base_mass, base_com, env_handle, actor_handle)
             sim_trajs = collect_trajectory(sim_traj, step, device)
             fake_output = discriminator(sim_trajs)
 

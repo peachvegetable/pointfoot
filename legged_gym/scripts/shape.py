@@ -14,7 +14,7 @@ import numpy as np
 import torch
 from legged_gym.utils import get_args, task_registry
 from legged_gym.scripts.GAN import load_policy, get_actions, simulate_trajectory, categorize_data_by_cmd
-from legged_gym.models.generator import Generator
+from legged_gym.models.generator import TransformerGenerator
 from legged_gym.models.discriminator import TransformerDiscriminator
 from legged_gym import LEGGED_GYM_ROOT_DIR
 from collections import defaultdict
@@ -27,10 +27,35 @@ def main():
     ppo_runner, train_cfg = task_registry.make_alg_runner(env=env, name=args.task, args=args)
     fric_range = env.cfg.domain_rand.friction_range
     obs, _ = env.reset()
+    asset_root = os.path.dirname(env.cfg.asset.file.format(LEGGED_GYM_ROOT_DIR=LEGGED_GYM_ROOT_DIR))
+    asset_file = os.path.basename(env.cfg.asset.file.format(LEGGED_GYM_ROOT_DIR=LEGGED_GYM_ROOT_DIR))
+    asset_options = gymapi.AssetOptions()
+    robot_asset = env.gym.load_asset(env.sim, asset_root, asset_file, asset_options)
+    device = ppo_runner.device
+    env_handle = env.envs[0]
+    actor_handle = env.actor_handles[0]
+    props = env.gym.get_actor_rigid_body_properties(env_handle, actor_handle)
 
     # Test obs
     # print(obs.shape)
     # print(obs[0][-3:])
+
+    # Test update added_mass
+    # base_mass = props[0].mass
+    # print(base_mass)
+    # print(base_mass.shape)
+    # print(f"mass before: {env.base_mass}")
+    # env.update_added_mass(env, base_mass, 1)
+    # print(f"mass after: {env.base_mass}")
+
+    # Test update base_com
+    # print(f"x before: {props[0].com.x}, y before: {props[0].com.y}, z before: {props[0].com.z}")
+    # base_com = props[0].com
+    # print(base_com)
+    # print(base_com.shape)
+    # env.update_base_com(props, base_com, [0.1, 0.1, 0.1], env_handle, actor_handle)
+    # print(f"x after: {props[0].com.x}, y after: {props[0].com.y}, z after: {props[0].com.z}")
+    print(props[0])
 
     # Test cmd
     # cmd = [0.5, 0, 0.5]
@@ -48,35 +73,24 @@ def main():
     #     print(data)
 
     # Test load_policy and get_actions
-    # policy_path = '/home/peachvegetable/policy/policy.onnx'
-    # policy = load_policy(policy_path)
+    policy_path = '/home/peachvegetable/policy/policy.onnx'
+    policy = load_policy(policy_path)
     # actions = get_actions(policy, env, device=torch.device("cuda"))
     # print(actions.shape)
     # print(actions)
     # print(f"env actions: {env.actions}")
 
     # Test update_frictions
-    # asset_root = os.path.dirname(env.cfg.asset.file.format(LEGGED_GYM_ROOT_DIR=LEGGED_GYM_ROOT_DIR))
-    # asset_file = os.path.basename(env.cfg.asset.file.format(LEGGED_GYM_ROOT_DIR=LEGGED_GYM_ROOT_DIR))
-    # asset_options = gymapi.AssetOptions()
-    # robot_asset = env.gym.load_asset(env.sim, asset_root, asset_file, asset_options)
     # for i in range(100):
     #     env.update_frictions(0.1, robot_asset)
     #     print(f"{i}th update completed")
 
     # Test generator
-    # generator = Generator(noise_dim=1, hidden_dim=40, output_range=fric_range).to(device)
-    # noise = torch.randn(1).to(device)
+    # generator = TransformerGenerator(input_dim=5, hidden_dim=80, output_dim=5).to(device)
+    # noise = torch.randn(1, 5).to(device)
     # sim_params = generator(noise)
-    # traj = simulate_trajectory(sim_params, policy, env, obs)
-    # print(traj.shape)
-    # tot_traj = []
-    # for _ in range(10):
-    #     sim_traj = simulate_trajectory(sim_params, policy, env, obs)
-    #     print(sim_traj.shape)
-    #     tot_traj.append(sim_traj)
-    # tot_traj = torch.stack(tot_traj)
-    # print(tot_traj.shape)
+    # print(sim_params)
+    # print(sim_params.shape)
 
     # Test discriminator
     # discriminator = TransformerDiscriminator(input_dim=27, hidden_dim=80, num_layers=2, output_dim=1, num_heads=4).to(device)

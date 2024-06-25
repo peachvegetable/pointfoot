@@ -98,12 +98,32 @@ class PointFoot:
         self._prepare_reward_function()
         self.init_done = True
 
-    def update_frictions(self, fric, robot_asset):
+    def update_frictions(self, fric, rigid_shape_props, robot_asset):
         """update the friction coefficient for all envs"""
-        rigid_shape_props = self.gym.get_asset_rigid_shape_properties(robot_asset)
         for prop in rigid_shape_props:
             prop.friction = fric
         self.gym.set_asset_rigid_shape_properties(robot_asset, rigid_shape_props)
+
+    def update_added_mass(self, base_mass, added_mass, props, env_handle, actor_handle):
+        """update the added mass for all envs"""
+        props[0].mass = base_mass + added_mass
+        self.base_mass = torch.tensor((props[0].mass), dtype=torch.float)
+        self.gym.set_actor_rigid_body_properties(env_handle, actor_handle, props, recomputeInertia=True)
+
+    def update_base_com(self, props, base_com, added_com, env_handle, actor_handle):
+        """update the base com for all envs"""
+        props[0].com.x = base_com.x + added_com[0]
+        props[0].com.y = base_com.y + added_com[1]
+        props[0].com.z = base_com.z + added_com[2]
+        self.gym.set_actor_rigid_body_properties(env_handle, actor_handle, props, recomputeInertia=True)
+
+    def update_cmd(self, cmd):
+        self.commands[0][0] = cmd[0]
+        self.commands[0][1] = cmd[1]
+        self.commands[0][2] = cmd[2]
+        self.commands_scale = torch.tensor([1, 1, 1]).to(self.device)
+        self.add_noise = False
+        self.compute_observations()
 
     def get_observations(self):
         return self.proprioceptive_obs_buf
