@@ -20,19 +20,22 @@ import torch.nn.functional as F
 #         return x
 
 class TransformerGenerator(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, num_layers=2, num_heads=4):
+    def __init__(self, input_dim, hidden_dim, output_dim, output_range, num_layers=2, num_heads=4):
         super(TransformerGenerator, self).__init__()
         self.embedding = nn.Linear(input_dim, hidden_dim)
         self.positional_encoding = nn.Parameter(torch.zeros(1, hidden_dim))
         self.transformer_encoder_layer = nn.TransformerEncoderLayer(d_model=hidden_dim, nhead=num_heads)
         self.transformer_encoder = nn.TransformerEncoder(self.transformer_encoder_layer, num_layers=num_layers)
         self.fc_out = nn.Linear(hidden_dim, output_dim)
+        self.output_rage = output_range
 
     def forward(self, x):
         # Additional positional encoding
         x = self.embedding(x) + self.positional_encoding
-        x = x.unsqueeze(0)  # Adding sequence dimension
+        x = x.unsqueeze(0)
         x = self.transformer_encoder(x)
-        x = x.squeeze(0)  # Removing sequence dimension
+        x = x.squeeze(0)
         x = torch.tanh(self.fc_out(x))
+        for i, (min_val, max_val) in enumerate(self.output_rage):
+            x[0][i] = torch.sigmoid(x[0][i]) * (max_val - min_val) + min_val
         return x

@@ -107,7 +107,7 @@ class PointFoot:
     def update_added_mass(self, base_mass, added_mass, props, env_handle, actor_handle):
         """update the added mass for all envs"""
         props[0].mass = base_mass + added_mass
-        self.base_mass = torch.tensor((props[0].mass), dtype=torch.float)
+        self.base_mass = torch.tensor(props[0].mass, dtype=torch.float)
         self.gym.set_actor_rigid_body_properties(env_handle, actor_handle, props, recomputeInertia=True)
 
     def update_base_com(self, props, base_com, added_com, env_handle, actor_handle):
@@ -264,7 +264,7 @@ class PointFoot:
         self._reset_dofs(env_ids)
         self._reset_root_states(env_ids)
 
-        self._resample(env_ids)
+        # self._resample(env_ids)
 
         self._reset_buffers(env_ids)
         # fill extras
