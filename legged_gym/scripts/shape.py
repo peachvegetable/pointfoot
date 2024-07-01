@@ -58,7 +58,7 @@ def main():
     # step = 5
     # trajs = collect_trajectory(sim_traj, step, env, policy, cmd, device)
     # print(trajs)
-    # actions = torch.tensor(([[1000.0000,  10000.0000, -10000.0000, -100000.0000, -10000.0000, -1000.0000]])).to(device)
+    # actions = torch.tensor(([[1000.0000, 10000.0000, -10000.0000, -100000.0000, -10000.0000, -1000.0000]])).to(device)
     # env.proprioceptive_obs_buf[0][18] = 100.0000
     # env.proprioceptive_obs_buf[0][19] = 100.0000
     # env.proprioceptive_obs_buf[0][20] = -100.0000
@@ -83,7 +83,6 @@ def main():
     # inputs = {policy.get_inputs()[0].name: obs_np}
     # actions = policy.run(None, inputs)
     # print(actions)
-
 
     # Test update added_mass
     # base_mass = props[0].mass

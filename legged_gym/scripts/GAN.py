@@ -168,14 +168,14 @@ def train(args, real_data, policy_path):
     gen_optimizer = optim.Adam(generator.parameters(), lr=0.0001)
 
     # num_epochs = train_cfg.runner.max_iterations
-    num_epochs = 2
+    num_epochs = 5000
     for epoch in range(num_epochs):
         for key in real_data:
-
             # Extract real data
             real_traj = torch.stack(real_data[key])
             real_traj = real_traj.to(device)
-            step = real_traj.shape[0]
+            step = real_traj.shape[0] - (real_traj.shape[0] // 2)
+            real_traj = real_traj[len(real_traj) - step:]
             cmd = key
 
             noise = torch.randn(5).to(device)  # random noise
@@ -207,15 +207,24 @@ def train(args, real_data, policy_path):
             gen_optimizer.step()
 
             # print(f"Epoch [{epoch+1}/{num_epochs}], d_loss: {d_loss.item()}, g_loss: {g_loss.item()}")
+            # Save sim_trajs for comparison
+            # if step == 344:
+            #     for tensor in sim_trajs:
+            #         tensor = tensor.cpu().numpy()
+            #     file_path = 'sim_trajs/'
+            #     file_name = f"sim_traj{epoch}"
+            #     path = os.path.join(file_path, file_name)
+            #     np.save(path, sim_trajs.cpu().numpy())
+            #     print(f"sim_trajs successfully saved to path: {path}")
 
             # Log the losses to TensorBoard
             writer.add_scalar('Loss/Discriminator', d_loss.item(), epoch)
             writer.add_scalar('Loss/Generator', g_loss.item(), epoch)
             writer.add_scalar('Friction', sim_params[0][0].item(), epoch)
             writer.add_scalar('Added_mass', sim_params[0][1].item(), epoch)
-            writer.add_scalar('COM_x', sim_params[0][2].item(), epoch)
-            writer.add_scalar('COM_y', sim_params[0][3].item(), epoch)
-            writer.add_scalar('COM_z', sim_params[0][4].item(), epoch)
+            writer.add_scalar('COM/x', sim_params[0][2].item(), epoch)
+            writer.add_scalar('COM/y', sim_params[0][3].item(), epoch)
+            writer.add_scalar('COM/z', sim_params[0][4].item(), epoch)
 
     writer.close()
 
