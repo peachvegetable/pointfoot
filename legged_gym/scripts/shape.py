@@ -13,7 +13,7 @@ import torch.optim as optim
 import numpy as np
 import torch
 from legged_gym.utils import get_args, task_registry
-from legged_gym.scripts.GAN import load_policy, get_actions, simulate_trajectory, categorize_data_by_cmd
+# from legged_gym.scripts.GAN import load_policy, get_actions, simulate_trajectory, categorize_data_by_cmd
 from legged_gym.models.generator import TransformerGenerator
 from legged_gym.models.discriminator import TransformerDiscriminator
 from legged_gym import LEGGED_GYM_ROOT_DIR
@@ -35,8 +35,20 @@ def main():
     env_handle = env.envs[0]
     actor_handle = env.actor_handles[0]
     props = env.gym.get_actor_rigid_body_properties(env_handle, actor_handle)
+    shape_props = env.gym.get_asset_rigid_shape_properties(robot_asset)
     policy_path = '/home/peachvegetable/policy/policy.onnx'
-    policy = load_policy(policy_path)
+    # policy = load_policy(policy_path)
+    real_data_file = '/home/peachvegetable/realdata/rr.npy'
+
+    # Test extract_real
+    print(args.task)
+    # friction_props = env.gym.get_asset_dof_properties(robot_asset)
+    # print(len(friction_props))
+    # print(len(friction_props["friction"]))
+    # real_data = extract_real.real_to_tensor(real_data_file)
+    # real_data = categorize_data_by_cmd(real_data)
+    # for key in real_data:
+    #     print(key)
 
     # Test obs
     # sim_traj = torch.tensor([[0.0029,  0.4911,  0.1620,  0.1737, -0.0261, -0.9845,  0.0193, -0.0212,
@@ -92,19 +104,20 @@ def main():
     #     obs1 = env.get_observations()
     #     print(f"mass before: {env.base_mass}")
     #     env.update_added_mass(base_mass, i, props, env_handle, actor_handle)
-    #     env.compute_observations()
+    #     env.compute_observations()new_props = self.gym.get_actor_rigid_body_properties(env_handle, actor_handle)
+    #         print(f"to update: {[new_x, new_y, new_z]}, com updated: {new_props[0].com}")
     #     obs2 = env.get_observations()
     #     print(f"mass after: {env.base_mass}, obs changed?: {not torch.equal(obs1, obs2)}")
 
     # Test update base_com
-    print(f"x before: {props[0].com.x}, y before: {props[0].com.y}, z before: {props[0].com.z}")
-    base_com = props[0].com
+    # print(f"x before: {props[0].com.x}, y before: {props[0].com.y}, z before: {props[0].com.z}")
+    # base_com = props[0].com
     # print(base_com)
     # print(base_com.shape)
-    for i in range(5):
-        env.update_base_com(props, base_com, [0.1, 0.1, 0.1], env_handle, actor_handle)
-        print(f"x after: {props[0].com.x}, y after: {props[0].com.y}, z after: {props[0].com.z}")
-    print(props[0])
+    # for i in range(5):
+    #     env.update_base_com(props, base_com, [0.1, 0.1, 0.1], env_handle, actor_handle)
+    #     print(f"x after: {props[0].com.x}, y after: {props[0].com.y}, z after: {props[0].com.z}")
+    # print(props[0])
 
     # Test cmd
     # cmd = [0.5, 0, 0.5]
@@ -115,10 +128,12 @@ def main():
     # print(f"Second obs: {obs1}")
 
     # Test real data
-    # real_data_file = '/home/peachvegetable/realdata/rr.npy'
     # real_data = extract_real.real_to_tensor(real_data_file)
+    # print(real_data[:5])
     # real_data = categorize_data_by_cmd(real_data)
-    # print(real_data)
+    # print(len(real_data))
+    # for cmd in real_data:
+    #     print(f"cmd: {cmd}, length: {len(real_data[cmd])}")
 
     # Test load_policy and get_actions
     # actions = get_actions(policy, env, device=torch.device("cuda"))
