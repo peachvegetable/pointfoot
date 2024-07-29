@@ -7,7 +7,7 @@ def main():
     num_obs = 27
     step = 1000
     # path = f'/home/peachvegetable/limx_rl/pointfoot-legged-gym/legged_gym/scripts/sim_trajs/sim_traj{10}.npy'
-    path = '/home/peachvegetable/output/sim_traj.npy'
+    path = '/home/peachvegetable/GAN/output/sim_traj.npy'
     sim_traj = np.load(path, allow_pickle=True)
     real_path = f'/home/peachvegetable/limx_rl/pointfoot-legged-gym/legged_gym/scripts/real_trajs/real_traj.npy'
     real1 = np.load(real_path, allow_pickle=True)

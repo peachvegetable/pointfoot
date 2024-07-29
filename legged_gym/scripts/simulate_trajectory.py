@@ -17,7 +17,6 @@ from legged_gym.models.generator import TransformerGenerator
 from legged_gym.models.rough_gen import MLPGenerator
 from legged_gym.models.rough_disc import MLPDiscriminator
 from legged_gym.scripts.extract_real import real_to_tensor
-import torch.optim as optim
 import onnxruntime as ort
 from legged_gym import LEGGED_GYM_ROOT_DIR
 from torch.utils.tensorboard import SummaryWriter
@@ -56,21 +55,22 @@ def simulate_trajectory(args, sim_params_path, policy_path, cmd_path, device, st
 
     rand_int = random.randint(100, 200)
 
-    friction = sim_params[0]
-    added_mass = sim_params[1]
-    added_com = sim_params[2:]
+    friction = sim_params[0:6]
+    added_mass = sim_params[6]
+    added_com = sim_params[7:]
+    # added_mass = sim_params[0]
+    # added_com = sim_params[1:]
 
     env.update_frictions(friction, env_handle, actor_handle)
     env.update_added_mass_and_base_com(added_mass, added_com, env_handle, actor_handle)
-
-    # Reset env after updating env parameters
-    # env.reset()
 
     env.update_cmd(cmd)  # obs is re-computed within the update_cmd function
 
     print(f"friction updated: {friction}, "
           f"mass updated: {added_mass}, "
           f"com updated: {added_com.tolist()}")
+    # print(f"mass updated: {added_mass}, "
+    #       f"com updated: {added_com.tolist()}")
 
     tot_traj = []
     for i in range(step + rand_int):
@@ -81,9 +81,7 @@ def simulate_trajectory(args, sim_params_path, policy_path, cmd_path, device, st
 
     tot_traj = torch.stack(tot_traj).to(device)
 
-    for tensor in tot_traj:
-        tensor = tensor.cpu().numpy()
-    file_path = '/home/peachvegetable/output/sim_traj'
+    file_path = '/home/peachvegetable/GAN/output/sim_traj'
     np.save(file_path, tot_traj.cpu().numpy())
     print(f"sim_trajs successfully saved to path: {file_path}")
 
@@ -93,9 +91,9 @@ if "__main__" == __name__:
     args.task = 'pointfoot_flat'
     args.headless = 'True'
     device = 'cpu'
-    policy_path = '/home/peachvegetable/policy/policy.onnx'
-    cmd_path = '/home/peachvegetable/input/cmd.npy'
-    sim_params_path = '/home/peachvegetable/input/sim_params.npy'
-    step_path = '/home/peachvegetable/input/step.npy'
+    policy_path = '/home/peachvegetable/GAN/policy/policy.onnx'
+    cmd_path = '/home/peachvegetable/GAN/input/cmd.npy'
+    sim_params_path = '/home/peachvegetable/GAN/input/sim_params.npy'
+    step_path = '/home/peachvegetable/GAN/input/step.npy'
 
     simulate_trajectory(args, sim_params_path, policy_path, cmd_path, device, step_path)
