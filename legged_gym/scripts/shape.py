@@ -25,14 +25,23 @@ import random
 
 
 def main():
-    disc_model_path = '/home/peachvegetable/GAN/output/discriminator'
-    generator_model_path = '/home/peachvegetable/GAN/output/generator'
-    discriminator = MLPDiscriminator(input_dim=27, hidden_dim=128, output_dim=27)
-    discriminator.load_state_dict(torch.load(disc_model_path))
+    # disc_model_path = '/home/peachvegetable/GAN/output/discriminator'
+    # generator_model_path = '/home/peachvegetable/GAN/output/generator'
+    # discriminator = MLPDiscriminator(input_dim=27, hidden_dim=128, output_dim=27)
+    # discriminator.load_state_dict(torch.load(disc_model_path))
+    fric_path = '/home/peachvegetable/GAN/input/sim_params_fric.pt'
+    fric = torch.rand(6)
+    torch.save(fric, fric_path)
+
+    # for key in real_data:
+    #     if len(real_data[key]) < 1100:
+    #         del real_data[key]
+    #
+    # np.save(real_data_file, real_data)
 
 
 if __name__ == '__main__':
     # policy_path = '/home/peachvegetable/policy/policy.onnx'
-    # device = "cuda"
+    # device = "cuda"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
     # policy = load_policy(policy_path, device)
     main()

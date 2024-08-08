@@ -2,10 +2,11 @@ import torch
 import torch.nn as nn
 
 
-class MLPDiscriminator(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim):
-        super(MLPDiscriminator, self).__init__()
+class LSTMDiscriminator(nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim, output_range):
+        super(LSTMDiscriminator, self).__init__()
         self.lstm = nn.LSTM(input_dim, input_dim, batch_first=True)
+        self.output_range = output_range
         self.fc = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.LeakyReLU(0.2),
@@ -19,8 +20,7 @@ class MLPDiscriminator(nn.Module):
             nn.Linear(hidden_dim, hidden_dim),
             nn.LeakyReLU(0.2),
 
-            nn.Linear(hidden_dim, output_dim),
-            nn.Sigmoid()
+            nn.Linear(hidden_dim, output_dim)
         )
         self._initialize_weights()
 
@@ -28,11 +28,11 @@ class MLPDiscriminator(nn.Module):
         # Pass the input through the LSTM layer
         lstm_out, _ = self.lstm(x)
 
-        # Global average pooling over the batch and sequence dimensions
-        avg_lstm_out = torch.mean(lstm_out, dim=0)
+        avg_out = torch.mean(lstm_out, dim=0)
 
         # Pass the pooled output through the fully connected layers
-        out = self.fc(avg_lstm_out)
+        out = self.fc(avg_out)
+
         return out
 
     def _initialize_weights(self):

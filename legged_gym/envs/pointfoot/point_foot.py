@@ -27,7 +27,6 @@ class PointFoot:
             device_id (int): 0, 1, ...
             headless (bool): Run without rendering if True
         """
-        self.props = []
         self.cfg = cfg
         self.sim_params = sim_params
         self.height_samples = None
@@ -38,15 +37,17 @@ class PointFoot:
 
         self.sim_params = sim_params
         self.physics_engine = physics_engine
-        self.sim_device = sim_device
+        self.sim_device = 'cpu'
         sim_device_type, self.sim_device_id = gymutil.parse_device_str(self.sim_device)
         self.headless = headless
 
         # env device is GPU only if sim is on GPU and use_gpu_pipeline=True, otherwise returned tensors are copied to CPU by physX.
-        if sim_device_type == 'cuda' and sim_params.use_gpu_pipeline:
-            self.device = self.sim_device
-        else:
-            self.device = 'cpu'
+        # if sim_device_type == 'cuda' and sim_params.use_gpu_pipeline:
+        #     self.device = self.sim_device
+        # else:
+        #     self.device = 'cpu'
+        self.device = 'cpu'
+        self.sim_params.use_gpu_pipeline = False
 
         # graphics device for rendering, -1 for no rendering
         self.graphics_device_id = self.sim_device_id
@@ -76,7 +77,7 @@ class PointFoot:
 
         # create envs, sim and viewer
         self.create_sim()
-        self.gym.prepare_sim(self.sim)
+        # self.gym.prepare_sim(self.sim)
 
         # todo: read from config
         self.enable_viewer_sync = True
@@ -98,24 +99,25 @@ class PointFoot:
         self._prepare_reward_function()
         self.init_done = True
 
-    def update_frictions(self, fric, rigid_shape_props, robot_asset):
+    def update_frictions(self, fric, env_handle, actor_handle):
         """update the friction coefficient for all envs"""
-        for prop in rigid_shape_props:
-            prop.friction = fric
-        self.gym.set_asset_rigid_shape_properties(robot_asset, rigid_shape_props)
+        dof_props = self.gym.get_actor_dof_properties(env_handle, actor_handle)
+        for i in range(len(dof_props["friction"])):
+            dof_props["friction"][i] = fric[i]
+        self.gym.set_actor_dof_properties(env_handle, actor_handle, dof_props)
 
-    def update_added_mass(self, base_mass, added_mass, props, env_handle, actor_handle):
-        """update the added mass for all envs"""
-        props[0].mass = base_mass + added_mass
-        self.base_mass = torch.tensor(props[0].mass, dtype=torch.float)
-        self.gym.set_actor_rigid_body_properties(env_handle, actor_handle, props, recomputeInertia=True)
+    def update_added_mass_and_base_com(self, added_mass, added_com, env_handle, actor_handle):
+        """update the added mass and com for all envs"""
+        # Update mass
+        body_props = self.gym.get_actor_rigid_body_properties(env_handle, actor_handle)
+        body_props[0].mass += added_mass
+        self.base_mass = torch.tensor(body_props[0].mass, dtype=torch.float)
 
-    def update_base_com(self, props, base_com, added_com, env_handle, actor_handle):
-        """update the base com for all envs"""
-        props[0].com.x = base_com.x + added_com[0]
-        props[0].com.y = base_com.y + added_com[1]
-        props[0].com.z = base_com.z + added_com[2]
-        self.gym.set_actor_rigid_body_properties(env_handle, actor_handle, props, recomputeInertia=True)
+        # Update com
+        body_props[0].com.x += added_com[0]
+        body_props[0].com.y += added_com[1]
+        body_props[0].com.z += added_com[2]
+        self.gym.set_actor_rigid_body_properties(env_handle, actor_handle, body_props, recomputeInertia=True)
 
     def update_cmd(self, cmd):
         self.commands[0][0] = cmd[0]
@@ -426,17 +428,7 @@ class PointFoot:
 
             for s in range(len(props)):
                 props[s].friction = self.friction_coeffs[env_id]
-                # self._log_friction_data(env_id, props[s].friction)
         return props
-
-    # def _log_friction_data(self, env_id, friction_value):
-    #     """ Log friction data for each environment"""
-    #     if len(self.friction) <= env_id:
-    #         self.friction.append([])
-    #     self.friction[env_id].append(friction_value)
-    #
-    # def get_friction(self):
-    #     return self.friction
 
     def _process_dof_props(self, props, env_id):
         """ Callback allowing to store/change/randomize the DOF properties of each environment.
@@ -505,23 +497,24 @@ class PointFoot:
         Args:
             env_ids (List[int]): Environments ids for which new commands are needed
         """
-        self.commands[env_ids, 0] = torch_rand_float(self.command_ranges["lin_vel_x"][0],
-                                                     self.command_ranges["lin_vel_x"][1], (len(env_ids), 1),
-                                                     device=self.device).squeeze(1)
-        self.commands[env_ids, 1] = torch_rand_float(self.command_ranges["lin_vel_y"][0],
-                                                     self.command_ranges["lin_vel_y"][1], (len(env_ids), 1),
-                                                     device=self.device).squeeze(1)
-        if self.cfg.commands.heading_command:
-            self.commands[env_ids, 3] = torch_rand_float(self.command_ranges["heading"][0],
-                                                         self.command_ranges["heading"][1], (len(env_ids), 1),
-                                                         device=self.device).squeeze(1)
-        else:
-            self.commands[env_ids, 2] = torch_rand_float(self.command_ranges["ang_vel_yaw"][0],
-                                                         self.command_ranges["ang_vel_yaw"][1], (len(env_ids), 1),
-                                                         device=self.device).squeeze(1)
-
-        # set small commands to zero
-        self.commands[env_ids, :2] *= (torch.norm(self.commands[env_ids, :2], dim=1) > 0.2).unsqueeze(1)
+        # self.commands[env_ids, 0] = torch_rand_float(self.command_ranges["lin_vel_x"][0],
+        #                                              self.command_ranges["lin_vel_x"][1], (len(env_ids), 1),
+        #                                              device=self.device).squeeze(1)
+        # self.commands[env_ids, 1] = torch_rand_float(self.command_ranges["lin_vel_y"][0],
+        #                                              self.command_ranges["lin_vel_y"][1], (len(env_ids), 1),
+        #                                              device=self.device).squeeze(1)
+        # if self.cfg.commands.heading_command:
+        #     self.commands[env_ids, 3] = torch_rand_float(self.command_ranges["heading"][0],
+        #                                                  self.command_ranges["heading"][1], (len(env_ids), 1),
+        #                                                  device=self.device).squeeze(1)
+        # else:
+        #     self.commands[env_ids, 2] = torch_rand_float(self.command_ranges["ang_vel_yaw"][0],
+        #                                                  self.command_ranges["ang_vel_yaw"][1], (len(env_ids), 1),
+        #                                                  device=self.device).squeeze(1)
+        #
+        # # set small commands to zero
+        # self.commands[env_ids, :2] *= (torch.norm(self.commands[env_ids, :2], dim=1) > 0.2).unsqueeze(1)
+        pass
 
     def _compute_torques(self, actions):
         """ Compute torques from actions.
@@ -899,6 +892,7 @@ class PointFoot:
         asset_options.disable_gravity = self.cfg.asset.disable_gravity
 
         robot_asset = self.gym.load_asset(self.sim, asset_root, asset_file, asset_options)
+        self.robot_asset = robot_asset
         self.num_dof = self.gym.get_asset_dof_count(robot_asset)
         self.num_bodies = self.gym.get_asset_rigid_body_count(robot_asset)
         dof_props_asset = self.gym.get_asset_dof_properties(robot_asset)
@@ -939,7 +933,6 @@ class PointFoot:
             start_pose.p = gymapi.Vec3(*pos)
 
             rigid_shape_props = self._process_rigid_shape_props(rigid_shape_props_asset, i)
-            self.props.append(rigid_shape_props)  # store the props of each env in self.props
             self.gym.set_asset_rigid_shape_properties(robot_asset, rigid_shape_props)
             actor_handle = self.gym.create_actor(env_handle, robot_asset, start_pose, self.cfg.asset.name, i,
                                                  self.cfg.asset.self_collisions, 0)
@@ -1254,3 +1247,4 @@ class PointFoot:
 
     def _reward_survival(self):
         return (~self.reset_buf).float() * self.dt
+
