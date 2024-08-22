@@ -24,6 +24,24 @@ import copy
 import random
 
 
+def parse_data(data):
+    chunk_size = 400
+    overlap_size = 100
+    length = data.shape[1]
+
+    num_chunks = (length - overlap_size) // (chunk_size - overlap_size)
+
+    chunks = []
+
+    for i in range(num_chunks):
+        start = i * (chunk_size - overlap_size)
+        end = start + chunk_size
+        chunk = data[:, start:end, :]
+        chunks.append(chunk)
+
+    return torch.stack(chunks)[:, -1, :, :]
+
+
 def load_policy(policy_path):
     return ort.InferenceSession(policy_path)
 
@@ -66,19 +84,28 @@ def simulate_trajectory(args, fric_path, mass_path, com_path, policy_path, cmd_p
           f"mass updated: {added_mass}, "
           f"com updated: {added_com.tolist()}")
 
+    terminate = 0
+
     tot_traj = []
     for i in range(step + rand_int):
         actions = get_actions(policy, env, device)
         obs, _, _, _, _ = env.step(actions)
+        if env.terminate == 1 and i > 0:
+            terminate = 1
+            terminate_path = '/home/peachvegetable/GAN/output/terminate.npy'
+            np.save(terminate_path, terminate)
+            sys.exit()
         if i >= rand_int:
             tot_traj.append(obs)
 
     tot_traj = torch.stack(tot_traj).to(device)
-    tot_traj = tot_traj.reshape(step, 27)
+    tot_traj = tot_traj.view(1, 1000, 27)
 
+    terminate_path = '/home/peachvegetable/GAN/output/terminate.npy'
+    np.save(terminate_path, terminate)
     file_path = '/home/peachvegetable/GAN/output/sim_traj.pt'
-    torch.save(tot_traj, file_path)
-    print(f"sim_trajs successfully saved to path: {file_path}")
+    torch.save(parse_data(tot_traj), file_path)
+    print(f"trajs saved to path: {file_path}")
 
 
 if "__main__" == __name__:

@@ -29,15 +29,18 @@ def main():
     # generator_model_path = '/home/peachvegetable/GAN/output/generator'
     # discriminator = MLPDiscriminator(input_dim=27, hidden_dim=128, output_dim=27)
     # discriminator.load_state_dict(torch.load(disc_model_path))
-    fric_path = '/home/peachvegetable/GAN/input/sim_params_fric.pt'
-    fric = torch.rand(6)
-    torch.save(fric, fric_path)
 
-    # for key in real_data:
-    #     if len(real_data[key]) < 1100:
-    #         del real_data[key]
+    for i in range(100):
+        trajs_path = f'/home/peachvegetable/GAN/output/sim_trajs/sim_traj{i}'
+        traj = torch.load(trajs_path)
+        traj1 = torch.load(f'/home/peachvegetable/GAN/output/sim_trajs/sim_traj{i+1}')
+        print(torch.equal(traj, traj1))
     #
-    # np.save(real_data_file, real_data)
+    # command = 'python simulate_trajectory.py'
+    # os.system(command)
+    # a = f'/home/peachvegetable/GAN/noise0.pt'
+    # b = f'/home/peachvegetable/GAN/noise.pt'
+    # print(torch.equal(torch.load(a), torch.load(b)))
 
 
 if __name__ == '__main__':

@@ -27,6 +27,7 @@ class PointFoot:
             device_id (int): 0, 1, ...
             headless (bool): Run without rendering if True
         """
+        self.terminate = None
         self.cfg = cfg
         self.sim_params = sim_params
         self.height_samples = None
@@ -123,8 +124,8 @@ class PointFoot:
         self.commands[0][0] = cmd[0]
         self.commands[0][1] = cmd[1]
         self.commands[0][2] = cmd[2]
-        self.commands_scale = torch.tensor([1, 1, 1]).to(self.device)
-        self.add_noise = False
+        # self.commands_scale = torch.tensor([1, 1, 1]).to(self.device)
+        # self.add_noise = False
         self.compute_observations()
 
     def get_observations(self):
@@ -240,6 +241,8 @@ class PointFoot:
         """
         self.reset_buf = torch.any(torch.norm(self.contact_forces[:, self.termination_contact_indices, :], dim=-1) > 1.,
                                    dim=1)
+        self.terminate = torch.any(torch.norm(self.contact_forces[:, self.termination_contact_indices, :], dim=-1) > 1.,
+                                   dim=1)
         self.time_out_buf = self.episode_length_buf > self.max_episode_length  # no terminal reward for time-outs
         self.reset_buf |= self.time_out_buf
 
@@ -328,6 +331,7 @@ class PointFoot:
             obs_noise_vec, privileged_extra_obs_noise_vec = self.noise_scale_vec
             obs_noise_buf = (2 * torch.rand_like(self.proprioceptive_obs_buf) - 1) * obs_noise_vec
             self.proprioceptive_obs_buf += obs_noise_buf
+            torch.save(obs_noise_buf, f'/home/peachvegetable/GAN/noise.pt')
             if self.num_privileged_obs is not None:
                 privileged_extra_obs_buf = (2 * torch.rand_like(
                     self.privileged_obs_buf[:, len(self.noise_scale_vec[0]):]) - 1) * privileged_extra_obs_noise_vec
