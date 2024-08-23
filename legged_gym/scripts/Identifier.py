@@ -7,6 +7,26 @@ from torch.utils.tensorboard import SummaryWriter
 import numpy as np
 
 
+def contains(params, avoid):
+    for comb in avoid:
+        if torch.equal(params, comb):
+            return True
+    return False
+
+
+def generate_params(avoid):
+    while True:
+        friction = torch.rand(6) * 0.2
+        mass = torch.rand(1) * 3 - 1
+        com = torch.rand(3)
+        com[0] = com[0] * 0.06 - 0.03
+        com[1] = com[1] * 0.04 - 0.02
+        com[2] = com[2] * 0.06 - 0.03
+        params = torch.cat((friction, mass, com))
+        if not contains(params, avoid):
+            return friction, mass, com
+
+
 def train():
     device = 'cpu'
     log_dir = "./logs/identifier_training"
@@ -19,19 +39,11 @@ def train():
     step = 1000
     epoch = 10000
     cmd = (0.0, 0.0, 0.0)
-    i = 0
-    # friction = torch.tensor((0.001, 0., 0., 0., 0., 0.))
-    # mass = torch.tensor([0.5])
-    # com = torch.tensor((0., 0.001, 0.))
-    # cmd = (0.0, 0.0, 0.0)
-    while True:
+    avoid = torch.load(f'/home/peachvegetable/GAN/output/avoid')
+    for i in range(epoch):
         model.train()
-        friction = torch.rand(6) * 0.2
-        mass = torch.rand(1) * 3 - 1
-        com = torch.rand(3)
-        com[0] = com[0] * 0.06 - 0.03
-        com[1] = com[1] * 0.04 - 0.02
-        com[2] = com[2] * 0.06 - 0.03
+
+        friction, mass, com = generate_params(avoid)
 
         step_path = '/home/peachvegetable/GAN/input/step.npy'
         cmd_path = '/home/peachvegetable/GAN/input/cmd.npy'
@@ -55,9 +67,8 @@ def train():
         terminate = np.load(terminate_path)
         print(f'Terminate: {terminate == 1}')
         if terminate:
+            avoid.append(torch.cat((friction, mass, com)))
             continue
-
-        i += 1
 
         # Acquire sim_trajs
         sim_trajs_path = '/home/peachvegetable/GAN/output/sim_traj.pt'
@@ -82,8 +93,10 @@ def train():
         # Save trajs and parameters
         trajs_path = f'/home/peachvegetable/GAN/output/sim_trajs/sim_traj{i}'
         param_path = f'/home/peachvegetable/GAN/output/real_params/params{i}'
+        avoid_path = f'/home/peachvegetable/GAN/output/avoid1'
         torch.save(sim_trajs, trajs_path)
         torch.save(real_param, param_path)
+        torch.save(avoid, avoid_path)
 
         writer.add_scalar('Loss', loss.item(), i)
         writer.add_scalars('Friction/0', {'real': friction[0].item(), 'fake': avg_output[0].item()}, i)
